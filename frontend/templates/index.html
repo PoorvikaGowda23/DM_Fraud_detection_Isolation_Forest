@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FraudScan — Anomaly Detection System</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root {
+    --bg:       #0a0b0e;
+    --surface:  #111318;
+    --card:     #15181f;
+    --border:   #1e2330;
+    --accent:   #00e5ff;
+    --accent2:  #ff4d6d;
+    --warn:     #ffbe0b;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --mono:     'IBM Plex Mono', monospace;
+    --sans:     'Syne', sans-serif;
+    --radius:   6px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 36px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--accent);
+  }
+  .logo span { color: var(--text); }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); display: inline-block;
+    margin-right: 8px; transition: background .3s;
+  }
+  .status-dot.active { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+  .header-status { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+
+  /* ── Layout ── */
+  main {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: calc(100vh - 61px);
+  }
+
+  /* ── Sidebar ── */
+  aside {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 28px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sidebar-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    padding: 14px 12px 6px;
+  }
+  .phase-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 0.88rem;
+    font-weight: 400;
+    cursor: pointer;
+    transition: all .2s;
+    text-align: left;
+  }
+  .phase-btn:hover { background: var(--card); color: var(--text); }
+  .phase-btn.active {
+    background: #00e5ff12;
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .phase-btn.done { color: #22c55e; }
+  .phase-badge {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    padding: 2px 7px;
+    border-radius: 20px;
+    background: var(--border);
+    color: var(--muted);
+    margin-left: auto;
+  }
+  .phase-btn.active .phase-badge { background: var(--accent); color: #000; }
+  .phase-btn.done .phase-badge   { background: #22c55e22; color: #22c55e; }
+
+  /* ── Content ── */
+  .content {
+    padding: 32px 36px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  /* Panels */
+  .panel { display: none; flex-direction: column; gap: 24px; }
+  .panel.active { display: flex; }
+
+  /* Section title */
+  .section-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .section-title span { color: var(--accent); }
+  .section-sub {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+  }
+  .card-title {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: #00e5ff08; }
+  .upload-icon { font-size: 2rem; margin-bottom: 12px; opacity: 0.6; }
+  .upload-text { font-size: 0.9rem; color: var(--muted); }
+  .upload-text strong { color: var(--text); }
+  #file-input { display: none; }
+
+  /* Run button */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 22px;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: var(--radius);
+    font-family: var(--sans);
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity .2s, transform .1s;
+  }
+  .btn:hover  { opacity: 0.88; }
+  .btn:active { transform: scale(.98); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+  }
+
+  /* Metrics grid */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 14px;
+  }
+  .metric-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: center;
+  }
+  .metric-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .metric-value {
+    font-family: var(--mono);
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: var(--accent);
+  }
+
+  /* Chart containers */
+  .chart-wrap {
+    position: relative;
+    height: 260px;
+  }
+
+  /* Feature importance bar */
+  .feat-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .feat-name {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    width: 80px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .feat-bar-bg { flex: 1; background: var(--border); border-radius: 2px; height: 8px; }
+  .feat-bar    { height: 8px; border-radius: 2px; background: var(--accent); transition: width .5s; }
+  .feat-val {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+    width: 46px;
+    text-align: right;
+  }
+
+  /* Explanation card */
+  .exp-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 12px;
+  }
+  .exp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .exp-score {
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    font-weight: 500;
+  }
+  .exp-score.fraud  { color: var(--accent2); }
+  .exp-score.normal { color: #22c55e; }
+  .exp-label {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .exp-label.fraud  { background: #ff4d6d22; color: var(--accent2); }
+  .exp-label.normal { background: #22c55e22; color: #22c55e; }
+  .exp-reason { font-size: 0.82rem; color: var(--muted); margin-top: 6px; }
+  .exp-reason strong { color: var(--accent); }
+
+  /* Comparison table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+  }
+  th {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  tr:last-child td { border-bottom: none; }
+  .best-val { color: var(--accent); font-weight: 500; }
+
+  /* Log / console */
+  .log-box {
+    background: #08090c;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    color: #4ade80;
+    max-height: 180px;
+    overflow-y: auto;
+    line-height: 1.8;
+  }
+
+  /* Progress bar */
+  .progress-wrap { background: var(--border); border-radius: 2px; height: 4px; margin: 8px 0; }
+  .progress-bar  { height: 4px; border-radius: 2px; background: var(--accent); width: 0; transition: width .6s ease; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 28px; right: 28px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 20px;
+    font-family: var(--mono); font-size: 0.8rem;
+    transform: translateY(80px); opacity: 0;
+    transition: all .3s; z-index: 999;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: #22c55e; color: #22c55e; }
+  .toast.error   { border-color: var(--accent2); color: var(--accent2); }
+
+  /* Grid layouts */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* Alpha plot */
+  .alpha-grid {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+  }
+  .alpha-chip {
+    font-family: var(--mono); font-size: 0.68rem;
+    padding: 4px 9px; border-radius: 3px;
+    background: var(--border); color: var(--muted);
+    border: 1px solid transparent;
+  }
+  .alpha-chip.best { background: #00e5ff18; border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">Fraud<span>Scan</span></div>
+  <div class="header-status">
+    <span class="status-dot" id="status-dot"></span>
+    <span id="status-text">Idle — upload a dataset to begin</span>
+  </div>
+</header>
+
+<main>
+<!-- Sidebar -->
+<aside>
+  <div class="sidebar-label">Navigation</div>
+  <button class="phase-btn active" data-panel="upload" onclick="showPanel('upload', this)">
+    Dataset Upload <span class="phase-badge">01</span>
+  </button>
+  <button class="phase-btn" id="btn-p1" data-panel="phase1" onclick="showPanel('phase1', this)">
+    Baseline iForest <span class="phase-badge">P1</span>
+  </button>
+  <button class="phase-btn" id="btn-p2" data-panel="phase2" onclick="showPanel('phase2', this)">
+    FW-iForest <span class="phase-badge">P2</span>
+  </button>
+  <button class="phase-btn" id="btn-p3" data-panel="phase3" onclick="showPanel('phase3', this)">
+    Hybrid + Explain <span class="phase-badge">P3</span>
+  </button>
+  <div style="margin-top: auto;">
+  <button class="phase-btn" data-panel="compare" onclick="showPanel('compare', this)">
+    Comparison <span class="phase-badge">⇄</span>
+  </button>
+  </div>
+</aside>
+
+<!-- Content -->
+<div class="content">
+
+  <!-- Upload Panel -->
+  <div class="panel active" id="panel-upload">
+    <div>
+      <div class="section-title">Dataset <span>Upload</span></div>
+      <div class="section-sub">// Upload the Kaggle Credit Card Fraud CSV to begin</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Select dataset file</div>
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+        <div class="upload-icon">⬆</div>
+        <div class="upload-text"><strong>Click to browse</strong> or drag & drop</div>
+        <div class="upload-text" style="margin-top:6px; font-size:.78rem">creditcard.csv — Kaggle format expected</div>
+      </div>
+      <input type="file" id="file-input" accept=".csv" onchange="handleFileSelect(this)"/>
+      <div id="file-name" style="font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-top:12px;"></div>
+    </div>
+
+    <div class="card" id="preview-card" style="display:none">
+      <div class="card-title">Dataset preview</div>
+      <div id="preview-table" style="overflow-x:auto; font-family:var(--mono); font-size:.74rem; color:var(--muted)"></div>
+      <div style="margin-top:16px">
+        <button class="btn" onclick="proceedToPhase1()">
+          Proceed to Phase 1 →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 1 Panel -->
+  <div class="panel" id="panel-phase1">
+    <div>
+      <div class="section-title">Phase 1 — <span>Baseline iForest</span></div>
+      <div class="section-sub">// Original Isolation Forest · Liu et al. 2008</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Model parameters</div>
+      <div class="two-col" style="gap:12px; margin-bottom:16px">
+        <div>
+          <label style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">N Estimators (t)</label>
+          <input id="p1-trees" type="number" value="100" style="width:100%;margin-top:6px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:.84rem;"/>
+        </div>
+        <div>
+          <label style="font-family:var(--mono);font-size:.72rem;color:var(--muted)">Max Samples (ψ)</label>
+          <input id="p1-samples" type="number" value="256" style="width:100%;margin-top:6px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:.84rem;"/>
+        </div>
+      </div>
+      <button class="btn" id="run-p1" onclick="runPhase1()">Run Phase 1</button>
+    </div>
+
+    <div id="p1-results" style="display:none;display:flex;flex-direction:column;gap:18px">
+      <div class="card">
+        <div class="card-title">Evaluation metrics</div>
+        <div class="metrics-grid" id="p1-metrics"></div>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">Score distribution</div>
+          <div class="chart-wrap"><canvas id="p1-chart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Confusion matrix</div>
+          <div class="chart-wrap"><canvas id="p1-cm-chart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 2 Panel -->
+  <div class="panel" id="panel-phase2">
+    <div>
+      <div class="section-title">Phase 2 — <span>FW-iForest</span></div>
+      <div class="section-sub">// Innovation 1 · Weighted feature selection</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Run feature-weighted isolation forest</div>
+      <p style="font-size:.84rem;color:var(--muted);margin-bottom:16px;line-height:1.7">
+        Features are ranked by variance, kurtosis, and mutual information.
+        Higher-importance features are selected more often during tree splits.
+      </p>
+      <button class="btn" id="run-p2" onclick="runPhase2()">Run Phase 2</button>
+    </div>
+
+    <div id="p2-results" style="display:none;display:flex;flex-direction:column;gap:18px">
+      <div class="card">
+        <div class="card-title">Evaluation metrics</div>
+        <div class="metrics-grid" id="p2-metrics"></div>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">Feature importance (top 10)</div>
+          <div id="feat-bars"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Score distribution</div>
+          <div class="chart-wrap"><canvas id="p2-chart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 3 Panel -->
+  <div class="panel" id="panel-phase3">
+    <div>
+      <div class="section-title">Phase 3 — <span>Hybrid + Explainability</span></div>
+      <div class="section-sub">// Innovation 2 + 3 · Autoencoder fusion · Per-instance explanation</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Hybrid fusion parameters</div>
+      <p style="font-size:.84rem;color:var(--muted);margin-bottom:16px;line-height:1.7">
+        Autoencoder is trained on normal transactions only. Alpha is auto-tuned via grid search to maximise AUC.
+      </p>
+      <button class="btn" id="run-p3" onclick="runPhase3()">Run Phase 3</button>
+    </div>
+
+    <div id="p3-results" style="display:none;display:flex;flex-direction:column;gap:18px">
+      <div class="card">
+        <div class="card-title">Evaluation metrics</div>
+        <div class="metrics-grid" id="p3-metrics"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Alpha tuning results</div>
+        <div id="alpha-best" style="font-family:var(--mono);font-size:.84rem;margin-bottom:10px;color:var(--accent)"></div>
+        <div class="alpha-grid" id="alpha-chips"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Sample anomaly explanations</div>
+        <div id="explanations"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compare Panel -->
+  <div class="panel" id="panel-compare">
+    <div>
+      <div class="section-title">Phase <span>Comparison</span></div>
+      <div class="section-sub">// Baseline vs FW-iForest vs Hybrid</div>
+    </div>
+    <div class="card">
+      <button class="btn btn-outline" onclick="loadComparison()" style="margin-bottom:18px">Refresh comparison</button>
+      <div style="overflow-x:auto">
+        <table id="compare-table">
+          <thead>
+            <tr>
+              <th>Phase</th><th>AUC-ROC</th><th>Avg Precision</th>
+              <th>Precision</th><th>Recall</th><th>F1 Score</th>
+            </tr>
+          </thead>
+          <tbody id="compare-body">
+            <tr><td colspan="6" style="color:var(--muted);font-family:var(--mono);font-size:.78rem;padding:20px">
+              Run all 3 phases first, then refresh.
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">F1 score comparison</div>
+      <div class="chart-wrap"><canvas id="compare-chart"></canvas></div>
+    </div>
+  </div>
+
+</div><!-- end content -->
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = "";   // same origin; set to "http://localhost:5000" if running separately
+
+// ── Panel navigation ──
+function showPanel(id, btn) {
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".phase-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById("panel-" + id).classList.add("active");
+  btn.classList.add("active");
+}
+
+// ── Toast ──
+function toast(msg, type="success") {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.className = "toast show " + type;
+  setTimeout(() => t.className = "toast", 3000);
+}
+
+// ── Status ──
+function setStatus(msg, active=false) {
+  document.getElementById("status-text").textContent = msg;
+  document.getElementById("status-dot").className = "status-dot" + (active ? " active" : "");
+}
+
+// ── Metrics renderer ──
+function renderMetrics(containerId, metrics) {
+  const map = {
+    auc_roc: "AUC-ROC", avg_precision: "Avg Precision",
+    precision: "Precision", recall: "Recall", f1_score: "F1 Score"
+  };
+  const el = document.getElementById(containerId);
+  el.innerHTML = Object.entries(map).map(([k, label]) =>
+    metrics[k] !== undefined ? `
+      <div class="metric-box">
+        <div class="metric-label">${label}</div>
+        <div class="metric-value">${typeof metrics[k] === "number" ? metrics[k].toFixed(4) : metrics[k]}</div>
+      </div>` : ""
+  ).join("");
+}
+
+// ── Score distribution chart ──
+let charts = {};
+function scoreChart(canvasId, data) {
+  if (charts[canvasId]) { charts[canvasId].destroy(); }
+  const ctx = document.getElementById(canvasId).getContext("2d");
+  const normal = data.scores.filter((_, i) => data.labels[i] === 0);
+  const fraud  = data.scores.filter((_, i) => data.labels[i] === 1);
+  const bins = 30;
+  const toBins = (arr) => {
+    const counts = new Array(bins).fill(0);
+    arr.forEach(v => counts[Math.min(bins-1, Math.floor(v * bins))]++);
+    return counts;
+  };
+  const labels = Array.from({length: bins}, (_, i) => (i/bins).toFixed(2));
+  charts[canvasId] = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        { label: "Normal", data: toBins(normal), backgroundColor: "#00e5ff44", borderColor: "#00e5ff", borderWidth: 1 },
+        { label: "Fraud",  data: toBins(fraud),  backgroundColor: "#ff4d6d44", borderColor: "#ff4d6d", borderWidth: 1 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: "#64748b", font: { family: "'IBM Plex Mono'" } } } },
+      scales: {
+        x: { ticks: { color: "#64748b" }, grid: { color: "#1e2330" } },
+        y: { ticks: { color: "#64748b" }, grid: { color: "#1e2330" } }
+      }
+    }
+  });
+}
+
+// ── File upload ──
+function handleFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById("file-name").textContent = "Selected: " + file.name;
+  const formData = new FormData();
+  formData.append("file", file);
+  setStatus("Uploading dataset…", true);
+  fetch(API + "/api/upload", { method: "POST", body: formData })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { toast(data.error, "error"); return; }
+      renderPreview(data.preview, data.columns);
+      document.getElementById("preview-card").style.display = "block";
+      setStatus("Dataset loaded — " + file.name, true);
+      toast("Dataset uploaded successfully");
+    })
+    .catch(() => toast("Upload failed", "error"));
+}
+
+function renderPreview(rows, cols) {
+  let html = "<table style='border-collapse:collapse;min-width:600px'><thead><tr>";
+  cols.slice(0, 8).forEach(c => html += `<th style='padding:6px 10px;border-bottom:1px solid var(--border);color:var(--muted)'>${c}</th>`);
+  html += "</tr></thead><tbody>";
+  rows.forEach(row => {
+    html += "<tr>";
+    cols.slice(0, 8).forEach(c => html += `<td style='padding:6px 10px;border-bottom:1px solid var(--border)'>${row[c] !== undefined ? row[c] : ""}</td>`);
+    html += "</tr>";
+  });
+  html += "</tbody></table>";
+  document.getElementById("preview-table").innerHTML = html;
+}
+
+function proceedToPhase1() {
+  showPanel("phase1", document.getElementById("btn-p1"));
+}
+
+// ── Phase 1 ──
+function runPhase1() {
+  const btn = document.getElementById("run-p1");
+  btn.disabled = true; btn.textContent = "Running…";
+  setStatus("Phase 1 running…", true);
+  fetch(API + "/api/phase1", { method: "POST" })
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false; btn.textContent = "Run Phase 1";
+      if (data.error) { toast(data.error, "error"); return; }
+      document.getElementById("p1-results").style.display = "flex";
+      renderMetrics("p1-metrics", data.metrics);
+      scoreChart("p1-chart", data.score_distribution);
+      document.getElementById("btn-p1").classList.add("done");
+      setStatus("Phase 1 complete");
+      toast("Phase 1 complete — " + data.metrics.f1_score + " F1");
+      showPanel("phase2", document.getElementById("btn-p2"));
+    })
+    .catch(() => { btn.disabled = false; btn.textContent = "Run Phase 1"; toast("Phase 1 failed", "error"); });
+}
+
+// ── Phase 2 ──
+function runPhase2() {
+  const btn = document.getElementById("run-p2");
+  btn.disabled = true; btn.textContent = "Running…";
+  setStatus("Phase 2 running…", true);
+  fetch(API + "/api/phase2", { method: "POST" })
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false; btn.textContent = "Run Phase 2";
+      if (data.error) { toast(data.error, "error"); return; }
+      document.getElementById("p2-results").style.display = "flex";
+      renderMetrics("p2-metrics", data.metrics);
+      renderFeatureImportance(data.feature_importance);
+      scoreChart("p2-chart", data.score_distribution);
+      document.getElementById("btn-p2").classList.add("done");
+      setStatus("Phase 2 complete");
+      toast("Phase 2 complete — " + data.metrics.f1_score + " F1");
+      showPanel("phase3", document.getElementById("btn-p3"));
+    })
+    .catch(() => { btn.disabled = false; btn.textContent = "Run Phase 2"; toast("Phase 2 failed", "error"); });
+}
+
+function renderFeatureImportance(feats) {
+  const max = Math.max(...feats.map(f => f.importance));
+  const el  = document.getElementById("feat-bars");
+  el.innerHTML = feats.slice(0, 10).map(f => `
+    <div class="feat-row">
+      <div class="feat-name">${f.feature}</div>
+      <div class="feat-bar-bg"><div class="feat-bar" style="width:${(f.importance/max*100).toFixed(1)}%"></div></div>
+      <div class="feat-val">${f.importance.toFixed(3)}</div>
+    </div>`).join("");
+}
+
+// ── Phase 3 ──
+function runPhase3() {
+  const btn = document.getElementById("run-p3");
+  btn.disabled = true; btn.textContent = "Training autoencoder…";
+  setStatus("Phase 3 running — this may take a minute…", true);
+  fetch(API + "/api/phase3", { method: "POST" })
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false; btn.textContent = "Run Phase 3";
+      if (data.error) { toast(data.error, "error"); return; }
+      document.getElementById("p3-results").style.display = "flex";
+      renderMetrics("p3-metrics", data.metrics);
+      renderAlpha(data.alpha_results, data.best_alpha);
+      renderExplanations(data.sample_explanations);
+      document.getElementById("btn-p3").classList.add("done");
+      setStatus("Phase 3 complete — best α = " + data.best_alpha);
+      toast("Phase 3 complete — F1 " + data.metrics.f1_score);
+    })
+    .catch(() => { btn.disabled = false; btn.textContent = "Run Phase 3"; toast("Phase 3 failed", "error"); });
+}
+
+function renderAlpha(results, best) {
+  document.getElementById("alpha-best").textContent = "Best α = " + best + " → AUC = " + results.find(r => r.alpha === best)?.auc;
+  document.getElementById("alpha-chips").innerHTML = results.map(r =>
+    `<span class="alpha-chip ${r.alpha === best ? 'best' : ''}">α=${r.alpha} → ${r.auc}</span>`
+  ).join("");
+}
+
+function renderExplanations(exps) {
+  document.getElementById("explanations").innerHTML = exps.map(e => {
+    const isFraud = e.label === 1;
+    return `
+    <div class="exp-card">
+      <div class="exp-header">
+        <div>
+          <span class="exp-score ${isFraud ? 'fraud' : 'normal'}">Score: ${e.anomaly_score}</span>
+          <div style="font-family:var(--mono);font-size:.68rem;color:var(--muted);margin-top:3px">
+            Path length: ${e.avg_path_length} · Index: ${e.index}
+          </div>
+        </div>
+        <span class="exp-label ${isFraud ? 'fraud' : 'normal'}">${isFraud ? 'FRAUD' : 'NORMAL'}</span>
+      </div>
+      <div class="exp-reason">
+        Top isolating features: ${e.top_features.map(f =>
+          `<strong>${f.feature}</strong> (${(f.contribution * 100).toFixed(1)}%)`
+        ).join(", ")}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// ── Comparison ──
+function loadComparison() {
+  fetch(API + "/api/compare")
+    .then(r => r.json())
+    .then(data => {
+      if (!data.phases.length) return;
+      const phases = data.phases;
+
+      // Table
+      const metrics = ["auc_roc","avg_precision","precision","recall","f1_score"];
+      const best = {};
+      metrics.forEach(m => best[m] = Math.max(...phases.map(p => p[m] || 0)));
+
+      document.getElementById("compare-body").innerHTML = phases.map(p => `
+        <tr>
+          <td>${p.phase}</td>
+          ${metrics.map(m => `<td class="${p[m] === best[m] ? 'best-val' : ''}">${p[m] !== undefined ? p[m].toFixed(4) : '—'}</td>`).join("")}
+        </tr>`).join("");
+
+      // Bar chart
+      if (charts["compare-chart"]) charts["compare-chart"].destroy();
+      const ctx = document.getElementById("compare-chart").getContext("2d");
+      charts["compare-chart"] = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: phases.map(p => p.phase.split("—")[0].trim()),
+          datasets: [
+            { label: "F1 Score",  data: phases.map(p => p.f1_score),  backgroundColor: "#00e5ff88" },
+            { label: "AUC-ROC",   data: phases.map(p => p.auc_roc),   backgroundColor: "#ff4d6d66" },
+            { label: "Recall",    data: phases.map(p => p.recall),    backgroundColor: "#ffbe0b55" }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#64748b", font: { family: "'IBM Plex Mono'" } } } },
+          scales: {
+            x: { ticks: { color: "#64748b" }, grid: { color: "#1e2330" } },
+            y: { min: 0, max: 1, ticks: { color: "#64748b" }, grid: { color: "#1e2330" } }
+          }
+        }
+      });
+    });
+}
+
+// Drag & drop
+const zone = document.getElementById("upload-zone");
+zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("drag"); });
+zone.addEventListener("dragleave", () => zone.classList.remove("drag"));
+zone.addEventListener("drop", e => {
+  e.preventDefault(); zone.classList.remove("drag");
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const dt = new DataTransfer(); dt.items.add(file);
+    document.getElementById("file-input").files = dt.files;
+    handleFileSelect(document.getElementById("file-input"));
+  }
+});
+</script>
+</body>
+</html>
